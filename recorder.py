@@ -75,17 +75,28 @@ class RollingWriter:
 # ============================================================
 # USER MANAGEMENT
 # ============================================================
-def get_or_create_username() -> str:
-    """Get username from user.json or prompt user to create it."""
+def load_user_config() -> dict:
+    """Load user config from user.json or return empty dict."""
     if USER_CONFIG_FILE.exists():
         try:
             with open(USER_CONFIG_FILE, "r") as f:
-                config = json.load(f)
-                username = config.get("username", "").strip()
-                if username:
-                    return username
+                return json.load(f)
         except (json.JSONDecodeError, IOError):
             pass
+    return {}
+
+
+def save_user_config(config: dict) -> None:
+    """Save user config to user.json."""
+    with open(USER_CONFIG_FILE, "w") as f:
+        json.dump(config, f, indent=2)
+
+
+def get_or_create_username(config: dict) -> str:
+    """Get username from config or prompt user to create it."""
+    username = config.get("username", "").strip()
+    if username:
+        return username
 
     # Prompt for username
     print()
@@ -99,12 +110,43 @@ def get_or_create_username() -> str:
         print("Invalid username. Use only letters, numbers, underscores, hyphens.")
         username = input("Enter your username: ").strip()
 
-    # Save to user.json
-    with open(USER_CONFIG_FILE, "w") as f:
-        json.dump({"username": username}, f, indent=2)
-
+    config["username"] = username
+    save_user_config(config)
     print(f"\nSaved username to {USER_CONFIG_FILE.name}")
     return username
+
+
+def get_or_update_dpi(config: dict) -> int:
+    """Get DPI from config or prompt user. Allow editing on each run."""
+    current_dpi = config.get("dpi", None)
+
+    print()
+    if current_dpi:
+        # Show current DPI, allow editing
+        dpi_input = input(f"Mouse DPI [{current_dpi}]: ").strip()
+        if dpi_input == "":
+            return current_dpi
+    else:
+        # First time - require input
+        print(
+            "Enter your mouse DPI (check mouse software, common: 400, 800, 1600, 3200)"
+        )
+        dpi_input = input("Mouse DPI: ").strip()
+
+    # Validate DPI
+    while True:
+        try:
+            dpi = int(dpi_input)
+            if 100 <= dpi <= 32000:
+                break
+            print("DPI should be between 100 and 32000.")
+        except ValueError:
+            print("Please enter a valid number.")
+        dpi_input = input("Mouse DPI: ").strip()
+
+    config["dpi"] = dpi
+    save_user_config(config)
+    return dpi
 
 
 # ============================================================
@@ -112,15 +154,6 @@ def get_or_create_username() -> str:
 # ============================================================
 class POINT(ctypes.Structure):
     _fields_ = [("x", wintypes.LONG), ("y", wintypes.LONG)]
-
-
-def get_screen_resolution() -> tuple[int, int]:
-    """Get the primary monitor screen resolution using Windows API."""
-    user32 = ctypes.windll.user32
-    # SM_CXSCREEN = 0, SM_CYSCREEN = 1
-    width = user32.GetSystemMetrics(0)
-    height = user32.GetSystemMetrics(1)
-    return width, height
 
 
 def select_game() -> dict:
@@ -159,17 +192,13 @@ def select_game() -> dict:
             print("Invalid choice. Enter 1-6.")
 
 
-def record_session(username: str) -> Path:
+def record_session(username: str, dpi: int) -> Path:
     """Record mouse movements until Ctrl+C."""
     # Select game first
     metadata = select_game()
     metadata["username"] = username
+    metadata["dpi"] = dpi
     metadata["sample_rate_hz"] = SAMPLE_RATE_HZ
-
-    # Detect screen resolution
-    screen_width, screen_height = get_screen_resolution()
-    metadata["screen_width"] = screen_width
-    metadata["screen_height"] = screen_height
 
     # Create session directory
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -190,7 +219,7 @@ def record_session(username: str) -> Path:
     print("=" * 50)
     print(f"Game: {metadata['game']}")
     print(f"User: {username}")
-    print(f"Screen: {screen_width}x{screen_height}")
+    print(f"DPI: {dpi}")
     print(f"Sample rate: {SAMPLE_RATE_HZ}Hz")
     print(f"Output: {session_dir}")
     print()
@@ -306,16 +335,23 @@ def main():
     print(f"Sample rate: {SAMPLE_RATE_HZ}Hz (fixed)")
     print()
 
+    # Load user config
+    config = load_user_config()
+
     # Get or create username
-    username = get_or_create_username()
+    username = get_or_create_username(config)
     print(f"\nLogged in as: {username}")
+
+    # Get or update DPI
+    dpi = get_or_update_dpi(config)
+    print(f"Mouse DPI: {dpi}")
 
     # Prompt to start
     print()
     input("Press ENTER to start recording...")
 
     # Record until Ctrl+C
-    session_dir = record_session(username)
+    session_dir = record_session(username, dpi)
 
     # Final instructions
     user_folder = RECORDINGS_DIR / username

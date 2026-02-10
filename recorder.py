@@ -22,7 +22,7 @@ from pathlib import Path
 # ============================================================
 # CONFIGURATION (Fixed - do not modify)
 # ============================================================
-SAMPLE_RATE_HZ = 50
+SAMPLE_RATE_HZ = 60
 SAMPLE_INTERVAL_SEC = 1.0 / SAMPLE_RATE_HZ  # 0.02s = 20ms
 MAX_LOG_FILE_BYTES = 1 * 1024 * 1024  # 1MB per file
 
@@ -114,6 +114,15 @@ class POINT(ctypes.Structure):
     _fields_ = [("x", wintypes.LONG), ("y", wintypes.LONG)]
 
 
+def get_screen_resolution() -> tuple[int, int]:
+    """Get the primary monitor screen resolution using Windows API."""
+    user32 = ctypes.windll.user32
+    # SM_CXSCREEN = 0, SM_CYSCREEN = 1
+    width = user32.GetSystemMetrics(0)
+    height = user32.GetSystemMetrics(1)
+    return width, height
+
+
 def select_game() -> dict:
     """Prompt user to select the game/application being recorded."""
     print()
@@ -157,6 +166,11 @@ def record_session(username: str) -> Path:
     metadata["username"] = username
     metadata["sample_rate_hz"] = SAMPLE_RATE_HZ
 
+    # Detect screen resolution
+    screen_width, screen_height = get_screen_resolution()
+    metadata["screen_width"] = screen_width
+    metadata["screen_height"] = screen_height
+
     # Create session directory
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     session_dir = RECORDINGS_DIR / username / timestamp
@@ -176,6 +190,7 @@ def record_session(username: str) -> Path:
     print("=" * 50)
     print(f"Game: {metadata['game']}")
     print(f"User: {username}")
+    print(f"Screen: {screen_width}x{screen_height}")
     print(f"Sample rate: {SAMPLE_RATE_HZ}Hz")
     print(f"Output: {session_dir}")
     print()

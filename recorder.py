@@ -54,6 +54,10 @@ class RollingWriter:
         filepath = self.session_dir / filename
         self.current_file = open(filepath, "w", buffering=1)
         self.current_file_size = 0
+        # Update .current marker
+        current_marker = self.session_dir / ".current"
+        with open(current_marker, "w") as f:
+            f.write(filename)
 
     def write_event(self, timestamp: float, dx: int, dy: int, state: str):
         line = f"{timestamp:.6f},MOUSE,{dx},{dy},{state}\n"
@@ -110,11 +114,58 @@ class POINT(ctypes.Structure):
     _fields_ = [("x", wintypes.LONG), ("y", wintypes.LONG)]
 
 
+def select_game() -> dict:
+    """Prompt user to select the game/application being recorded."""
+    print()
+    print("=" * 50)
+    print("SELECT GAME/APPLICATION")
+    print("=" * 50)
+    print()
+    print("[1] VALORANT")
+    print("[2] CSGO")
+    print("[3] Dota 2")
+    print("[4] LoL")
+    print("[5] PC (general desktop use)")
+    print("[6] Other (enter custom name)")
+    print()
+
+    games = {
+        "1": "VALORANT",
+        "2": "CSGO",
+        "3": "Dota 2",
+        "4": "LoL",
+        "5": "PC",
+    }
+
+    while True:
+        choice = input("Enter choice [1-6]: ").strip()
+        if choice in games:
+            return {"game": games[choice]}
+        elif choice == "6":
+            custom = input("Enter game name: ").strip()
+            if custom:
+                return {"game": custom}
+            print("Game name cannot be empty.")
+        else:
+            print("Invalid choice. Enter 1-6.")
+
+
 def record_session(username: str) -> Path:
     """Record mouse movements until Ctrl+C."""
+    # Select game first
+    metadata = select_game()
+    metadata["username"] = username
+    metadata["sample_rate_hz"] = SAMPLE_RATE_HZ
+
     # Create session directory
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     session_dir = RECORDINGS_DIR / username / timestamp
+    metadata["session_id"] = timestamp
+
+    # Save metadata
+    session_dir.mkdir(parents=True, exist_ok=True)
+    with open(session_dir / "metadata.json", "w") as f:
+        json.dump(metadata, f, indent=2)
 
     # Initialize writer
     writer = RollingWriter(session_dir)
@@ -123,6 +174,7 @@ def record_session(username: str) -> Path:
     print("=" * 50)
     print("RECORDING SESSION")
     print("=" * 50)
+    print(f"Game: {metadata['game']}")
     print(f"User: {username}")
     print(f"Sample rate: {SAMPLE_RATE_HZ}Hz")
     print(f"Output: {session_dir}")

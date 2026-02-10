@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Mouse Movement Recorder - Standalone Client (Windows)
 
-Records mouse movements at 50Hz for research data collection.
+Records mouse movements at 60Hz for research data collection.
 Zero external dependencies - uses Windows APIs directly.
 
 Usage:
@@ -23,7 +23,7 @@ from pathlib import Path
 # CONFIGURATION (Fixed - do not modify)
 # ============================================================
 SAMPLE_RATE_HZ = 60
-SAMPLE_INTERVAL_SEC = 1.0 / SAMPLE_RATE_HZ  # 0.02s = 20ms
+SAMPLE_INTERVAL_SEC = 1.0 / SAMPLE_RATE_HZ  # ~0.0167s = 16.67ms
 MAX_LOG_FILE_BYTES = 1 * 1024 * 1024  # 1MB per file
 
 # Paths relative to script location
@@ -231,33 +231,32 @@ def record_session(username: str) -> Path:
             left_pressed = (get_async_key_state(VK_LBUTTON) & 0x8000) != 0
             right_pressed = (get_async_key_state(VK_RBUTTON) & 0x8000) != 0
 
+            # Left click events
             if left_pressed != last_left_state:
-                state = "CLICK_DOWN" if left_pressed else "CLICK_UP"
+                state = "LEFT_DOWN" if left_pressed else "LEFT_UP"
                 writer.write_event(now, 0, 0, state)
                 event_count += 1
                 if left_pressed:
                     click_count += 1
                 last_left_state = left_pressed
 
+            # Right click events
             if right_pressed != last_right_state:
-                state = "CLICK_DOWN" if right_pressed else "CLICK_UP"
+                state = "RIGHT_DOWN" if right_pressed else "RIGHT_UP"
                 writer.write_event(now, 0, 0, state)
                 event_count += 1
                 if right_pressed:
                     click_count += 1
                 last_right_state = right_pressed
 
-            # Sample position at 50Hz intervals
+            # Sample position at target Hz intervals (always MOVE, no DRAG)
             if now >= next_sample_time:
                 if get_cursor_pos(ctypes.byref(point)):
                     dx = point.x - last_x
                     dy = point.y - last_y
 
                     if dx != 0 or dy != 0:
-                        state = (
-                            "DRAG" if (last_left_state or last_right_state) else "MOVE"
-                        )
-                        writer.write_event(now, dx, dy, state)
+                        writer.write_event(now, dx, dy, "MOVE")
                         event_count += 1
                         last_x, last_y = point.x, point.y
 

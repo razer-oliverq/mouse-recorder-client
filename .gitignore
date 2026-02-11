@@ -2,4 +2,6 @@
 user.json
 
 # Recorded data (users upload separately)
-recordings/
+# recordings/
+
+# Git track the bot files
